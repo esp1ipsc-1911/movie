@@ -18,7 +18,9 @@ export function VideoPlayer({ videoUrl, videoRef, matchInfo, currentTime }: Vide
           <>
             <video ref={videoRef} src={videoUrl} controls className="h-full w-full object-contain" />
             <div className="pointer-events-none absolute left-4 top-4 rounded-2xl bg-slate-950/70 px-4 py-3 backdrop-blur">
-              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-300">Insight Dynamics Shooting - Movie</div>
+              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-300">
+                Insight Dynamics Shooting - Movie
+              </div>
               <div className="mt-2 text-sm text-white">{matchInfo.matchName || 'Match not set'}</div>
               <div className="text-sm text-slate-300">{matchInfo.stageName || 'Stage not set'}</div>
               {matchInfo.shooterName ? <div className="text-sm text-slate-400">{matchInfo.shooterName}</div> : null}
