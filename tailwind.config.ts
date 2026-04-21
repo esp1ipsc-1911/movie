@@ -1,20 +1,16 @@
 import type { Config } from 'tailwindcss'
 
 const config: Config = {
-  content: [
-    './app/**/*.{js,ts,jsx,tsx,mdx}',
-    './components/**/*.{js,ts,jsx,tsx,mdx}',
-    './lib/**/*.{js,ts,jsx,tsx,mdx}',
-  ],
+  content: ['./app/**/*.{ts,tsx}', './components/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
-        panel: '#0f172a',
-        panelSoft: '#111827',
-        accent: '#f59e0b',
+        panel: '#0d1833',
+        panel2: '#111c3d',
+        accent: '#d8a11d',
       },
       boxShadow: {
-        soft: '0 12px 40px rgba(15, 23, 42, 0.25)',
+        soft: '0 20px 60px rgba(0, 0, 0, 0.35)',
       },
     },
   },

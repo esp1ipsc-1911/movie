@@ -26,3 +26,35 @@ export type MatchInfo = {
   stageName: string
   shooterName: string
 }
+
+export type AnalysisJobStatus =
+  | 'idle'
+  | 'uploading'
+  | 'uploaded'
+  | 'queued'
+  | 'analyzing'
+  | 'completed'
+  | 'failed'
+
+export type UploadState = {
+  url: string | null
+  pathname: string | null
+  fileName: string | null
+  size: number | null
+  contentType: string | null
+}
+
+export type AnalysisJob = {
+  jobId: string
+  status: AnalysisJobStatus
+  videoUrl: string
+  createdAt: string
+  updatedAt: string
+  error?: string
+  result?: AnalysisResult
+}
+
+export type CreateJobResponse = {
+  jobId: string
+  status: AnalysisJobStatus
+}

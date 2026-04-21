@@ -4,41 +4,29 @@ import { MatchInfo } from '@/lib/types'
 
 type MatchStageHeaderProps = {
   value: MatchInfo
-  onChange: (value: MatchInfo) => void
+  onChange: (nextValue: MatchInfo) => void
 }
+
+const fields: Array<{ key: keyof MatchInfo; label: string; placeholder: string }> = [
+  { key: 'matchName', label: 'Match', placeholder: 'Example: Nordic Handgun Cup' },
+  { key: 'stageName', label: 'Stage', placeholder: 'Example: Stage 7' },
+  { key: 'shooterName', label: 'Shooter / run', placeholder: 'Optional' },
+]
 
 export function MatchStageHeader({ value, onChange }: MatchStageHeaderProps) {
   return (
-    <div className="rounded-3xl border border-white/10 bg-white/5 p-5 shadow-soft backdrop-blur">
-      <div className="grid gap-4 md:grid-cols-3">
-        <label className="text-sm text-slate-300">
-          <span className="mb-2 block font-semibold uppercase tracking-[0.15em] text-amber-300">Match</span>
+    <div className="grid gap-4 md:grid-cols-3">
+      {fields.map((field) => (
+        <label key={field.key} className="rounded-[1.75rem] border border-white/10 bg-panel/80 p-4 shadow-soft backdrop-blur">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-amber-300">{field.label}</div>
           <input
-            className="w-full rounded-xl border border-white/10 bg-slate-950/50 px-4 py-3 text-slate-100 outline-none ring-0 placeholder:text-slate-500"
-            value={value.matchName}
-            onChange={(event) => onChange({ ...value, matchName: event.target.value })}
-            placeholder="Example: Nordic Handgun Cup"
+            className="mt-3 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-3 text-sm text-white outline-none placeholder:text-slate-500"
+            placeholder={field.placeholder}
+            value={value[field.key]}
+            onChange={(event) => onChange({ ...value, [field.key]: event.target.value })}
           />
         </label>
-        <label className="text-sm text-slate-300">
-          <span className="mb-2 block font-semibold uppercase tracking-[0.15em] text-amber-300">Stage</span>
-          <input
-            className="w-full rounded-xl border border-white/10 bg-slate-950/50 px-4 py-3 text-slate-100 outline-none ring-0 placeholder:text-slate-500"
-            value={value.stageName}
-            onChange={(event) => onChange({ ...value, stageName: event.target.value })}
-            placeholder="Example: Stage 7"
-          />
-        </label>
-        <label className="text-sm text-slate-300">
-          <span className="mb-2 block font-semibold uppercase tracking-[0.15em] text-amber-300">Shooter / Run</span>
-          <input
-            className="w-full rounded-xl border border-white/10 bg-slate-950/50 px-4 py-3 text-slate-100 outline-none ring-0 placeholder:text-slate-500"
-            value={value.shooterName}
-            onChange={(event) => onChange({ ...value, shooterName: event.target.value })}
-            placeholder="Optional"
-          />
-        </label>
-      </div>
+      ))}
     </div>
   )
 }

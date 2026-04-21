@@ -4,12 +4,28 @@ import { AnalysisSettings } from '@/lib/types'
 
 type AnalysisControlsProps = {
   settings: AnalysisSettings
-  onChange: (settings: AnalysisSettings) => void
+  onChange: (nextValue: AnalysisSettings) => void
   onAnalyze: () => void
   onAddShotAtCurrentTime: () => void
   onRemoveLastShot: () => void
-  isAnalyzing: boolean
+  disabled?: boolean
+  isAnalyzing?: boolean
 }
+
+type SliderField = {
+  key: keyof AnalysisSettings
+  label: string
+  min: number
+  max: number
+  step: number
+}
+
+const sliderFields: SliderField[] = [
+  { key: 'sensitivity', label: 'Sensitivity', min: 0.3, max: 2, step: 0.05 },
+  { key: 'echoWindowMs', label: 'Echo filter window (ms)', min: 40, max: 240, step: 5 },
+  { key: 'minShotGapMs', label: 'Minimum shot gap (ms)', min: 60, max: 280, step: 5 },
+  { key: 'noiseFloor', label: 'Noise floor', min: 0.005, max: 0.2, step: 0.005 },
+]
 
 export function AnalysisControls({
   settings,
@@ -17,100 +33,66 @@ export function AnalysisControls({
   onAnalyze,
   onAddShotAtCurrentTime,
   onRemoveLastShot,
+  disabled,
   isAnalyzing,
 }: AnalysisControlsProps) {
   return (
-    <div className="rounded-3xl border border-white/10 bg-white/5 p-5 shadow-soft backdrop-blur">
-      <h2 className="text-lg font-bold text-white">Controls</h2>
-      <p className="mt-2 text-sm text-slate-300">
-        Tune the detector to better separate real shots from echoes and background noise.
-      </p>
+    <div className="rounded-[2rem] border border-white/10 bg-panel2/80 p-5 shadow-soft backdrop-blur">
+      <div className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-300">Controls</div>
+      <p className="mt-2 text-sm text-slate-300">Tune the backend detector settings that will be sent together with the upload job.</p>
 
       <div className="mt-5 space-y-5">
-        <RangeControl
-          label="Sensitivity"
-          value={settings.sensitivity}
-          min={0.2}
-          max={2}
-          step={0.05}
-          onChange={(value) => onChange({ ...settings, sensitivity: value })}
-        />
-        <RangeControl
-          label="Echo filter window (ms)"
-          value={settings.echoWindowMs}
-          min={60}
-          max={250}
-          step={5}
-          onChange={(value) => onChange({ ...settings, echoWindowMs: value })}
-        />
-        <RangeControl
-          label="Minimum shot gap (ms)"
-          value={settings.minShotGapMs}
-          min={80}
-          max={400}
-          step={5}
-          onChange={(value) => onChange({ ...settings, minShotGapMs: value })}
-        />
-        <RangeControl
-          label="Noise floor"
-          value={settings.noiseFloor}
-          min={0.01}
-          max={0.3}
-          step={0.01}
-          onChange={(value) => onChange({ ...settings, noiseFloor: value })}
-        />
+        {sliderFields.map((field) => (
+          <label key={field.key} className="block">
+            <div className="mb-2 flex items-center justify-between gap-3 text-sm text-slate-200">
+              <span>{field.label}</span>
+              <span className="font-semibold text-amber-300">{settings[field.key]}</span>
+            </div>
+            <input
+              type="range"
+              min={field.min}
+              max={field.max}
+              step={field.step}
+              value={settings[field.key]}
+              onChange={(event) =>
+                onChange({
+                  ...settings,
+                  [field.key]: Number(event.target.value),
+                })
+              }
+              className="w-full"
+              disabled={disabled}
+            />
+          </label>
+        ))}
       </div>
 
-      <div className="mt-6 grid gap-3">
+      <div className="mt-6 space-y-3">
         <button
-          className="rounded-2xl bg-amber-400 px-4 py-3 font-semibold text-slate-950 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          type="button"
           onClick={onAnalyze}
-          disabled={isAnalyzing}
+          disabled={disabled || isAnalyzing}
+          className="w-full rounded-2xl bg-accent px-4 py-4 text-base font-black text-slate-950 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isAnalyzing ? 'Analyzing…' : 'Analyze video'}
+          {isAnalyzing ? 'Starting analysis…' : 'Upload + analyze video'}
         </button>
         <button
-          className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 font-semibold text-white transition hover:bg-white/10"
+          type="button"
           onClick={onAddShotAtCurrentTime}
+          disabled={disabled}
+          className="w-full rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-4 text-base font-bold text-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Add shot at current time
         </button>
         <button
-          className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 font-semibold text-white transition hover:bg-white/10"
+          type="button"
           onClick={onRemoveLastShot}
+          disabled={disabled}
+          className="w-full rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-4 text-base font-bold text-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Remove last shot
         </button>
       </div>
     </div>
-  )
-}
-
-type RangeControlProps = {
-  label: string
-  value: number
-  min: number
-  max: number
-  step: number
-  onChange: (value: number) => void
-}
-
-function RangeControl({ label, value, min, max, step, onChange }: RangeControlProps) {
-  return (
-    <label className="block">
-      <div className="mb-2 flex items-center justify-between text-sm">
-        <span className="text-slate-300">{label}</span>
-        <span className="font-semibold text-amber-300">{value}</span>
-      </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
-        className="w-full"
-      />
-    </label>
   )
 }

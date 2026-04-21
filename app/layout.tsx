@@ -3,7 +3,7 @@ import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
   title: 'Insight Dynamics Shooting - Movie',
-  description: 'Analyze timer beep and shots from recorded shooting videos.',
+  description: 'Upload iPhone or camera video, send it to backend analysis, and review beep/shot timing.',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

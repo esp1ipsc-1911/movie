@@ -2,16 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnalysisControls } from '@/components/AnalysisControls'
+import { AnalysisStatus } from '@/components/AnalysisStatus'
 import { MatchStageHeader } from '@/components/MatchStageHeader'
 import { OverlayStats } from '@/components/OverlayStats'
 import { Timeline } from '@/components/Timeline'
 import { UploadPanel } from '@/components/UploadPanel'
 import { VideoPlayer } from '@/components/VideoPlayer'
+import { createAnalysisJob, getAnalysisJob, uploadVideoToBlob } from '@/lib/api'
 import { calculateStats } from '@/lib/audio/calculateStats'
-import { detectShots } from '@/lib/audio/detectShots'
-import { detectStartBeep } from '@/lib/audio/detectStartBeep'
-import { extractAudioFromFile } from '@/lib/audio/extractAudio'
-import { AnalysisResult, AnalysisSettings, MatchInfo, ShotEvent } from '@/lib/types'
+import { AnalysisJobStatus, AnalysisResult, AnalysisSettings, MatchInfo, ShotEvent, UploadState } from '@/lib/types'
 
 const defaultSettings: AnalysisSettings = {
   sensitivity: 1,
@@ -29,15 +28,27 @@ const emptyResult: AnalysisResult = {
   totalShots: 0,
 }
 
+const emptyUploadState: UploadState = {
+  url: null,
+  pathname: null,
+  fileName: null,
+  size: null,
+  contentType: null,
+}
+
 export default function HomePage() {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const pollingRef = useRef<number | null>(null)
   const [file, setFile] = useState<File | null>(null)
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
   const [duration, setDuration] = useState(0)
   const [currentTime, setCurrentTime] = useState(0)
   const [settings, setSettings] = useState<AnalysisSettings>(defaultSettings)
   const [result, setResult] = useState<AnalysisResult>(emptyResult)
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [status, setStatus] = useState<AnalysisJobStatus>('idle')
+  const [error, setError] = useState<string | null>(null)
+  const [jobId, setJobId] = useState<string | null>(null)
+  const [uploadState, setUploadState] = useState<UploadState>(emptyUploadState)
   const [matchInfo, setMatchInfo] = useState<MatchInfo>({
     matchName: '',
     stageName: '',
@@ -46,11 +57,22 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!file) {
+      setVideoUrl(null)
+      setUploadState(emptyUploadState)
+      setStatus('idle')
+      setError(null)
       return
     }
 
     const objectUrl = URL.createObjectURL(file)
     setVideoUrl(objectUrl)
+    setUploadState({
+      url: null,
+      pathname: null,
+      fileName: file.name,
+      size: file.size,
+      contentType: file.type,
+    })
 
     return () => {
       URL.revokeObjectURL(objectUrl)
@@ -75,24 +97,69 @@ export default function HomePage() {
     }
   }, [videoUrl])
 
+  useEffect(() => {
+    if (!jobId || !['queued', 'analyzing'].includes(status)) {
+      return
+    }
+
+    async function poll() {
+      try {
+        const job = await getAnalysisJob(jobId)
+        setStatus(job.status)
+        setError(job.error || null)
+        if (job.result) {
+          setResult(job.result)
+        }
+      } catch (pollError) {
+        setStatus('failed')
+        setError(pollError instanceof Error ? pollError.message : 'Could not read analysis status')
+      }
+    }
+
+    poll()
+    pollingRef.current = window.setInterval(poll, 2500)
+
+    return () => {
+      if (pollingRef.current) {
+        window.clearInterval(pollingRef.current)
+        pollingRef.current = null
+      }
+    }
+  }, [jobId, status])
+
   const orderedShots = useMemo(() => [...result.shots].sort((a, b) => a.time - b.time), [result.shots])
 
   async function runAnalysis() {
     if (!file) {
+      setError('Select a video first.')
       return
     }
 
-    setIsAnalyzing(true)
+    setError(null)
+    setResult(emptyResult)
+    setStatus('uploading')
+
     try {
-      const { samples, sampleRate } = await extractAudioFromFile(file)
-      const beep = detectStartBeep(samples, sampleRate)
-      const shots = detectShots(samples, sampleRate, beep, settings)
-      setResult(calculateStats(beep, shots))
-    } catch (error) {
-      console.error('Analysis failed', error)
-      alert('The app could not analyze this video file. Try another recording or format.')
-    } finally {
-      setIsAnalyzing(false)
+      const blob = await uploadVideoToBlob(file)
+      setUploadState({
+        url: blob.url,
+        pathname: blob.pathname,
+        fileName: file.name,
+        size: file.size,
+        contentType: file.type,
+      })
+      setStatus('uploaded')
+
+      const job = await createAnalysisJob({
+        videoUrl: blob.url,
+        settings,
+        matchInfo,
+      })
+      setJobId(job.jobId)
+      setStatus(job.status)
+    } catch (runError) {
+      setStatus('failed')
+      setError(runError instanceof Error ? runError.message : 'Could not upload or create analysis job')
     }
   }
 
@@ -128,15 +195,15 @@ export default function HomePage() {
     <main className="mx-auto min-h-screen max-w-7xl px-4 py-8 md:px-6 xl:px-8">
       <div className="mb-8 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <div className="text-sm font-semibold uppercase tracking-[0.35em] text-amber-300">Insight Dynamics Shooting - Movie</div>
-          <h1 className="mt-2 text-4xl font-black tracking-tight text-white">Recorded run analysis for dynamic shooting</h1>
+          <div className="text-sm font-semibold uppercase tracking-[0.35em] text-amber-300">Insight Dynamics Shooting - Movie v2</div>
+          <h1 className="mt-2 text-4xl font-black tracking-tight text-white">Recorded run analysis with iPhone-first upload flow</h1>
           <p className="mt-3 max-w-3xl text-slate-300">
-            Upload a recorded run, detect the timer beep, identify shots, and separate likely shots from echo and background noise.
+            Upload a recorded run, store the original file safely, then send the job to a backend analyzer that can process iPhone video reliably.
           </p>
         </div>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.55fr_0.85fr]">
+      <div className="grid gap-6 xl:grid-cols-[1.45fr_0.95fr]">
         <div className="space-y-6">
           <MatchStageHeader value={matchInfo} onChange={setMatchInfo} />
           <VideoPlayer videoUrl={videoUrl} videoRef={videoRef} matchInfo={matchInfo} currentTime={currentTime} />
@@ -144,14 +211,16 @@ export default function HomePage() {
         </div>
 
         <div className="space-y-6">
-          <UploadPanel onSelect={setFile} fileName={file?.name} />
+          <UploadPanel onSelect={setFile} fileName={file?.name} disabled={status === 'uploading'} />
+          <AnalysisStatus status={status} upload={uploadState} error={error} jobId={jobId} />
           <AnalysisControls
             settings={settings}
             onChange={setSettings}
             onAnalyze={runAnalysis}
             onAddShotAtCurrentTime={addShotAtCurrentTime}
             onRemoveLastShot={removeLastShot}
-            isAnalyzing={isAnalyzing}
+            disabled={status === 'uploading'}
+            isAnalyzing={status === 'uploading' || status === 'queued' || status === 'analyzing'}
           />
           <OverlayStats result={result} />
         </div>
