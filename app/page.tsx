@@ -8,6 +8,7 @@ import { OverlayStats } from '@/components/OverlayStats'
 import { Timeline } from '@/components/Timeline'
 import { UploadPanel } from '@/components/UploadPanel'
 import { VideoPlayer } from '@/components/VideoPlayer'
+import { VideoExporter } from '@/components/VideoExporter'
 import { calculateStats } from '@/lib/audio/calculateStats'
 import { detectShots } from '@/lib/audio/detectShots'
 import { detectStartBeep } from '@/lib/audio/detectStartBeep'
@@ -179,6 +180,7 @@ export default function HomePage() {
             isAnalyzing={isAnalyzing}
           />
           <OverlayStats result={result} />
+          <VideoExporter videoUrl={videoUrl} result={result} matchInfo={matchInfo} />
         </div>
       </div>
     </main>

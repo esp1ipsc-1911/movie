@@ -1,6 +1,20 @@
 import { AnalysisSettings, ShotEvent } from '@/lib/types'
-import { filterEchoes } from '@/lib/audio/filterEchoes'
 
+/**
+ * Transient-onset shot detector.
+ *
+ * Strategy: a gunshot is a sudden, large amplitude jump followed by a decay.
+ * We measure the peak of the CURRENT frame vs the peak of the PREVIOUS frame.
+ * If the ratio exceeds a threshold, it's a candidate. After accepting a shot
+ * we enter a hard cooldown that ignores all frames for `minShotGapMs` ms —
+ * this kills echo tails and reverb bleed without needing a separate echo filter.
+ *
+ * Settings:
+ *   sensitivity   – multiplier on the onset ratio threshold (lower = more sensitive)
+ *   noiseFloor    – absolute minimum peak for a frame to be considered at all
+ *   minShotGapMs  – hard cooldown after each accepted shot
+ *   echoWindowMs  – (unused in this detector; kept for UI compatibility)
+ */
 export function detectShots(
   samples: Float32Array,
   sampleRate: number,
@@ -11,46 +25,60 @@ export function detectShots(
     return []
   }
 
-  const frameSize = 512
-  const hopSize = 128
-  const startIndex = Math.floor((startTime + 0.02) * sampleRate)
-  const candidates: ShotEvent[] = []
-  let previousAcceptedTime = -Infinity
+  // Frame size ~5 ms at 44100 Hz – short enough to catch sharp transients
+  const frameSize = Math.round(sampleRate * 0.005)   // ~220 samples
+  const hopSize   = Math.round(sampleRate * 0.0025)  // ~110 samples (50% overlap)
+
+  // How many times louder than the previous frame counts as an onset
+  // sensitivity=1 → ratio must be ≥5×; sensitivity=2 → ≥3×; sensitivity=0.5 → ≥9×
+  const onsetRatioThreshold = 5.0 / settings.sensitivity
+
+  // Minimum absolute peak in a frame to bother with (filters silence/hiss)
+  const minPeak = Math.max(settings.noiseFloor * 3, 0.10)
+
+  const cooldownSamples = Math.round((settings.minShotGapMs / 1000) * sampleRate)
+  const startIndex = Math.floor((startTime + 0.05) * sampleRate)
+
+  const shots: ShotEvent[] = []
+  let cooldownUntil = startIndex
+  let prevFramePeak = 0
 
   for (let i = startIndex; i + frameSize < samples.length; i += hopSize) {
-    let peak = 0
-    let energy = 0
-    let transient = 0
-
-    for (let j = 1; j < frameSize; j += 1) {
-      const current = Math.abs(samples[i + j])
-      const prev = Math.abs(samples[i + j - 1])
-      peak = Math.max(peak, current)
-      energy += current * current
-      transient += Math.max(0, current - prev)
+    // Find peak amplitude in this frame
+    let framePeak = 0
+    for (let j = 0; j < frameSize; j++) {
+      const abs = Math.abs(samples[i + j])
+      if (abs > framePeak) framePeak = abs
     }
 
-    const normalizedEnergy = energy / frameSize
-    const normalizedTransient = transient / frameSize
-    const confidence = peak * 0.55 + normalizedEnergy * 18 + normalizedTransient * 8
-    const threshold = settings.noiseFloor + settings.sensitivity * 0.22
-    const eventTime = i / sampleRate
-    const gapMs = (eventTime - previousAcceptedTime) * 1000
+    // Skip if we're in cooldown
+    if (i < cooldownUntil) {
+      prevFramePeak = framePeak
+      continue
+    }
 
-    if (
-      confidence > threshold &&
-      peak > 0.18 &&
-      gapMs > settings.minShotGapMs
-    ) {
-      candidates.push({
-        id: `shot-${candidates.length + 1}-${eventTime.toFixed(3)}`,
+    // Skip weak frames
+    if (framePeak < minPeak) {
+      prevFramePeak = framePeak
+      continue
+    }
+
+    // Compute onset ratio vs previous frame
+    const ratio = prevFramePeak > 0.001 ? framePeak / prevFramePeak : framePeak * 10
+
+    if (ratio >= onsetRatioThreshold) {
+      const eventTime = i / sampleRate
+      shots.push({
+        id: `shot-${shots.length + 1}-${eventTime.toFixed(3)}`,
         time: Number(eventTime.toFixed(3)),
-        confidence: Number(confidence.toFixed(3)),
+        confidence: Number(Math.min(ratio / onsetRatioThreshold, 9.99).toFixed(3)),
         source: 'auto',
       })
-      previousAcceptedTime = eventTime
+      cooldownUntil = i + cooldownSamples
     }
+
+    prevFramePeak = framePeak
   }
 
-  return filterEchoes(candidates, settings.echoWindowMs)
+  return shots
 }
