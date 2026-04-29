@@ -5,7 +5,7 @@ import { RefObject } from 'react'
 
 type VideoPlayerProps = {
   videoUrl: string | null
-  videoRef: RefObject<HTMLVideoElement | null>
+  videoRef: RefObject<HTMLVideoElement>
   matchInfo: MatchInfo
   currentTime: number
 }
