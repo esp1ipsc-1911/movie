@@ -12,176 +12,125 @@ type VideoExporterProps = {
 type ExportState = 'idle' | 'rendering' | 'done' | 'error' | 'unsupported'
 
 // Colors
-const AMBER  = '#fbbf24'
-const GREEN  = '#34d399'
-const WHITE  = '#ffffff'
-const BG     = 'rgba(2, 6, 23, 0.78)'
+const AMBER = '#fbbf24'
+const GREEN = '#34d399'
 
 function drawOverlay(
   ctx: CanvasRenderingContext2D,
   w: number,
   h: number,
-  currentTime: number,
+  t: number,
   result: AnalysisResult,
   matchInfo: MatchInfo,
 ) {
-  const { startBeepTime, shots, firstShotTime, bestSplit, splits } = result
-  const pad = Math.round(w * 0.022)
-  const r = Math.round(w * 0.018)
+  const { shots, startBeepTime, firstShotTime, splits } = result
+  const duration = shots.length > 0
+    ? Math.max(...shots.map(s => s.time)) + 1.5
+    : Math.max(t + 1, 5)
 
-  // ── Top-left info panel ─────────────────────────────────────────────────────
-  const lines: { text: string; color: string; size: number }[] = [
-    { text: 'INSIGHT DYNAMICS SHOOTING — MOVIE', color: AMBER, size: Math.round(w * 0.018) },
-    { text: matchInfo.matchName || 'Match ikke satt',  color: WHITE, size: Math.round(w * 0.026) },
-    { text: matchInfo.stageName || 'Stage ikke satt',  color: '#94a3b8', size: Math.round(w * 0.022) },
-  ]
-  if (matchInfo.shooterName) {
-    lines.push({ text: matchInfo.shooterName, color: '#64748b', size: Math.round(w * 0.020) })
-  }
+  // ── Top-left: minimal match info ──────────────────────────────────────────
+  const infoLines = [matchInfo.matchName, matchInfo.stageName, matchInfo.shooterName].filter(Boolean) as string[]
+  if (infoLines.length > 0) {
+    const pad = Math.round(w * 0.018)
+    const labelSize = Math.round(h * 0.030)
+    const lineH = labelSize * 1.4
 
-  const lineHeight = Math.round(w * 0.032)
-  const panelH = pad * 2 + lines.length * lineHeight
-  const panelW = Math.round(w * 0.44)
+    const grad = ctx.createLinearGradient(0, 0, 0, pad * 2 + infoLines.length * lineH + pad)
+    grad.addColorStop(0, 'rgba(0,0,0,0.50)')
+    grad.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = grad
+    ctx.fillRect(0, 0, Math.round(w * 0.5), pad * 2 + infoLines.length * lineH + pad)
 
-  ctx.fillStyle = BG
-  roundRect(ctx, pad, pad, panelW, panelH, r)
-  ctx.fill()
-
-  let ty = pad * 2
-  for (const line of lines) {
-    ctx.fillStyle = line.color
-    ctx.font = `600 ${line.size}px "SF Pro Display", -apple-system, system-ui, sans-serif`
-    ctx.fillText(line.text, pad * 2, ty)
-    ty += lineHeight
-  }
-
-  // ── Bottom-right time panel ─────────────────────────────────────────────────
-  const timeStr = currentTime.toFixed(2) + 's'
-  const timeFontSize = Math.round(w * 0.048)
-  ctx.font = `800 ${timeFontSize}px "SF Pro Display", -apple-system, system-ui, sans-serif`
-  const timeW = ctx.measureText(timeStr).width
-  const timePanelW = timeW + pad * 3
-  const timePanelH = timeFontSize + pad * 2.5
-
-  ctx.fillStyle = BG
-  roundRect(ctx, w - timePanelW - pad, h - timePanelH - pad, timePanelW, timePanelH, r)
-  ctx.fill()
-
-  ctx.fillStyle = WHITE
-  ctx.fillText(timeStr, w - timeW - pad * 1.5, h - pad * 1.8)
-
-  // ── Bottom timeline bar ─────────────────────────────────────────────────────
-  const barH    = Math.round(h * 0.045)
-  const barY    = h - barH - pad * 0.4
-  const barX    = pad
-  const barW    = w - pad * 2
-  const barR    = Math.round(barH / 2)
-  const duration = shots.length > 0 ? Math.max(...shots.map(s => s.time)) + 2 : currentTime + 2
-
-  // Bar background
-  ctx.fillStyle = 'rgba(2, 6, 23, 0.85)'
-  roundRect(ctx, barX, barY, barW, barH, barR)
-  ctx.fill()
-
-  // Progress fill
-  const progress = duration > 0 ? currentTime / duration : 0
-  ctx.fillStyle = 'rgba(251,191,36,0.25)'
-  roundRect(ctx, barX, barY, barW * progress, barH, barR)
-  ctx.fill()
-
-  // Shot markers on bar
-  for (const shot of shots) {
-    const mx = barX + (shot.time / duration) * barW
-    const isActive = currentTime >= shot.time && currentTime < shot.time + 0.5
-    ctx.fillStyle = isActive ? AMBER : 'rgba(251,191,36,0.7)'
-    ctx.beginPath()
-    ctx.arc(mx, barY + barH / 2, isActive ? barH * 0.55 : barH * 0.35, 0, Math.PI * 2)
-    ctx.fill()
-  }
-
-  // Beep marker
-  if (startBeepTime != null) {
-    const bx = barX + (startBeepTime / duration) * barW
-    ctx.fillStyle = GREEN
-    ctx.beginPath()
-    ctx.arc(bx, barY + barH / 2, barH * 0.35, 0, Math.PI * 2)
-    ctx.fill()
-  }
-
-  // Playhead
-  const px = barX + progress * barW
-  ctx.strokeStyle = WHITE
-  ctx.lineWidth = 2
-  ctx.beginPath()
-  ctx.moveTo(px, barY)
-  ctx.lineTo(px, barY + barH)
-  ctx.stroke()
-
-  // ── Stats panel – top right ─────────────────────────────────────────────────
-  const stats: { label: string; value: string }[] = [
-    { label: 'SKUDD', value: String(shots.length) },
-    { label: 'FØRSTE', value: firstShotTime != null ? firstShotTime.toFixed(2) + 's' : '--' },
-    { label: 'BESTE SPLIT', value: bestSplit != null ? bestSplit.toFixed(2) + 's' : '--' },
-  ]
-
-  const statFontSize = Math.round(w * 0.022)
-  const statValSize  = Math.round(w * 0.032)
-  const statW = Math.round(w * 0.18)
-  const statH = pad * 2 + stats.length * (statFontSize + statValSize + pad * 0.6)
-  const statX = w - statW - pad
-
-  ctx.fillStyle = BG
-  roundRect(ctx, statX, pad, statW, statH, r)
-  ctx.fill()
-
-  let sy = pad * 2
-  for (const stat of stats) {
-    ctx.fillStyle = '#64748b'
-    ctx.font = `600 ${statFontSize}px "SF Pro Display", -apple-system, system-ui, sans-serif`
-    ctx.fillText(stat.label, statX + pad, sy)
-    sy += statFontSize + 4
-    ctx.fillStyle = WHITE
-    ctx.font = `800 ${statValSize}px "SF Pro Display", -apple-system, system-ui, sans-serif`
-    ctx.fillText(stat.value, statX + pad, sy)
-    sy += statValSize + pad * 0.6
-  }
-
-  // ── Active shot flash ───────────────────────────────────────────────────────
-  for (const shot of shots) {
-    const age = currentTime - shot.time
-    if (age >= 0 && age < 0.4) {
-      const alpha = 1 - age / 0.4
-      ctx.fillStyle = `rgba(251,191,36,${alpha * 0.18})`
-      ctx.fillRect(0, 0, w, h)
-
-      // Split label
-      const shotIdx = shots.indexOf(shot)
-      const splitLabel = shotIdx === 0
-        ? (startBeepTime != null ? `Drew: ${firstShotTime?.toFixed(2)}s` : `Skudd 1`)
-        : `Split ${shotIdx}: ${splits[shotIdx - 1]?.toFixed(2)}s`
-
-      const flashSize = Math.round(w * 0.055)
-      ctx.font = `900 ${flashSize}px "SF Pro Display", -apple-system, system-ui, sans-serif`
-      ctx.fillStyle = `rgba(251,191,36,${alpha})`
-      ctx.textAlign = 'center'
-      ctx.fillText(splitLabel, w / 2, h / 2)
+    let ly = pad + labelSize
+    for (let i = 0; i < infoLines.length; i++) {
+      ctx.font = `${i === 0 ? 700 : 500} ${labelSize}px -apple-system,"SF Pro Display",system-ui,sans-serif`
+      ctx.fillStyle = i === 0 ? 'rgba(251,191,36,0.95)' : 'rgba(255,255,255,0.80)'
       ctx.textAlign = 'left'
+      ctx.fillText(infoLines[i], pad, ly)
+      ly += lineH
     }
   }
-}
 
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  // ── Bottom gradient fade ───────────────────────────────────────────────────
+  const fadeH = Math.round(h * 0.22)
+  const fadeGrad = ctx.createLinearGradient(0, h - fadeH, 0, h)
+  fadeGrad.addColorStop(0, 'rgba(0,0,0,0)')
+  fadeGrad.addColorStop(1, 'rgba(0,0,0,0.68)')
+  ctx.fillStyle = fadeGrad
+  ctx.fillRect(0, h - fadeH, w, fadeH)
+
+  // ── Timeline bar ──────────────────────────────────────────────────────────
+  const barH = Math.round(h * 0.007)
+  const barY = h - Math.round(h * 0.048)
+  const barX = Math.round(w * 0.025)
+  const barW = w - barX * 2
+  const prog = Math.min(1, t / duration)
+
+  ctx.fillStyle = 'rgba(255,255,255,0.18)'
   ctx.beginPath()
-  ctx.moveTo(x + r, y)
-  ctx.lineTo(x + w - r, y)
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r)
-  ctx.lineTo(x + w, y + h - r)
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
-  ctx.lineTo(x + r, y + h)
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r)
-  ctx.lineTo(x, y + r)
-  ctx.quadraticCurveTo(x, y, x + r, y)
-  ctx.closePath()
+  ctx.roundRect(barX, barY, barW, barH, barH / 2)
+  ctx.fill()
+
+  if (prog > 0) {
+    ctx.fillStyle = 'rgba(251,191,36,0.55)'
+    ctx.beginPath()
+    ctx.roundRect(barX, barY, barW * prog, barH, barH / 2)
+    ctx.fill()
+  }
+
+  const dotR = Math.round(h * 0.009)
+  for (const shot of shots) {
+    const mx = barX + (shot.time / duration) * barW
+    const isActive = t >= shot.time && t < shot.time + 0.5
+    ctx.beginPath()
+    ctx.arc(mx, barY + barH / 2, isActive ? dotR * 1.6 : dotR, 0, Math.PI * 2)
+    ctx.fillStyle = isActive ? AMBER : 'rgba(251,191,36,0.85)'
+    ctx.fill()
+  }
+
+  if (startBeepTime != null) {
+    const bx = barX + (startBeepTime / duration) * barW
+    ctx.beginPath()
+    ctx.arc(bx, barY + barH / 2, dotR, 0, Math.PI * 2)
+    ctx.fillStyle = GREEN
+    ctx.fill()
+  }
+
+  const px = barX + prog * barW
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)'
+  ctx.lineWidth = Math.max(1, Math.round(w * 0.0015))
+  ctx.beginPath()
+  ctx.moveTo(px, barY - dotR * 1.5)
+  ctx.lineTo(px, barY + barH + dotR * 1.5)
+  ctx.stroke()
+
+  // ── Timer bottom-right ─────────────────────────────────────────────────────
+  const timerSize = Math.round(h * 0.072)
+  ctx.font = `800 ${timerSize}px -apple-system,"SF Pro Display",system-ui,monospace`
+  ctx.fillStyle = 'rgba(255,255,255,0.95)'
+  ctx.textAlign = 'right'
+  ctx.fillText(t.toFixed(2), w - Math.round(w * 0.025), h - Math.round(h * 0.055))
+  ctx.textAlign = 'left'
+
+  // ── Active shot flash + split label ───────────────────────────────────────
+  for (let i = 0; i < shots.length; i++) {
+    const age = t - shots[i].time
+    if (age >= 0 && age < 0.5) {
+      const alpha = 1 - age / 0.5
+      ctx.fillStyle = `rgba(251,191,36,${alpha * 0.10})`
+      ctx.fillRect(0, 0, w, h)
+
+      const splitStr = i === 0
+        ? (startBeepTime != null ? `DRAW  ${firstShotTime?.toFixed(2)}s` : `SKUDD 1`)
+        : `SPLIT ${i}  ${splits[i - 1]?.toFixed(2)}s`
+
+      const splitSize = Math.round(h * 0.050)
+      ctx.font = `900 ${splitSize}px -apple-system,"SF Pro Display",system-ui,sans-serif`
+      ctx.fillStyle = `rgba(251,191,36,${alpha})`
+      ctx.textAlign = 'left'
+      ctx.fillText(splitStr, Math.round(w * 0.025), h - Math.round(h * 0.095))
+    }
+  }
 }
 
 export function VideoExporter({ videoUrl, result, matchInfo }: VideoExporterProps) {
@@ -212,12 +161,13 @@ export function VideoExporter({ videoUrl, result, matchInfo }: VideoExporterProp
     setProgress(0)
     setDownloadUrl(null)
 
-    // Create hidden video element for frame source
     const video = document.createElement('video')
     video.src = videoUrl
     video.muted = true
     video.playsInline = true
     video.crossOrigin = 'anonymous'
+    // Play at 2× speed to render faster, we capture every frame anyway
+    video.playbackRate = 1.0
 
     await new Promise<void>((res) => {
       video.onloadedmetadata = () => res()
@@ -225,54 +175,64 @@ export function VideoExporter({ videoUrl, result, matchInfo }: VideoExporterProp
     })
 
     const duration = video.duration
-    const W = video.videoWidth  || 1280
-    const H = video.videoHeight || 720
 
-    // Canvas for compositing
+    // Scale down for faster rendering – cap at 1280px wide
+    const origW = video.videoWidth  || 1280
+    const origH = video.videoHeight || 720
+    const scale = Math.min(1, 1280 / origW)
+    const W = Math.round(origW * scale)
+    const H = Math.round(origH * scale)
+
     const canvas = document.createElement('canvas')
     canvas.width  = W
     canvas.height = H
-    const ctx = canvas.getContext('2d')!
+    const ctx = canvas.getContext('2d', { alpha: false })!
 
-    // Choose best supported MIME
     const mimeType = ['video/webm;codecs=vp9', 'video/webm', 'video/mp4']
       .find(t => MediaRecorder.isTypeSupported(t)) ?? 'video/webm'
 
     const chunks: BlobPart[] = []
+    // Capture at 30fps
     const stream   = canvas.captureStream(30)
-    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 })
-
+    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 6_000_000 })
     recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data) }
+    const recordingDone = new Promise<void>((res) => { recorder.onstop = () => res() })
+    recorder.start(200)
 
-    const recordingDone = new Promise<void>((res) => {
-      recorder.onstop = () => res()
+    // Draw loop driven by requestAnimationFrame during playback
+    let rafId = 0
+    let lastProgress = 0
+
+    const drawFrame = () => {
+      if (cancelRef.current) return
+      const t = video.currentTime
+      ctx.drawImage(video, 0, 0, W, H)
+      drawOverlay(ctx, W, H, t, result, matchInfo)
+      const pct = Math.round((t / duration) * 100)
+      if (pct !== lastProgress) {
+        lastProgress = pct
+        setProgress(pct)
+      }
+      if (!video.ended && !video.paused) {
+        rafId = requestAnimationFrame(drawFrame)
+      }
+    }
+
+    await new Promise<void>((res) => {
+      video.onended = () => res()
+      video.onerror = () => res()
+      video.currentTime = 0
+      video.onseeked = () => {
+        rafId = requestAnimationFrame(drawFrame)
+        video.play()
+      }
     })
 
-    recorder.start(100) // collect chunks every 100ms
+    cancelAnimationFrame(rafId)
 
-    // Render frame by frame at ~30 fps using requestAnimationFrame isn't
-    // available headlessly, so we seek + draw in a loop
-    const fps      = 30
-    const frameMs  = 1000 / fps
-    let   t        = 0
-
-    const seekAndDraw = (): Promise<void> =>
-      new Promise((res) => {
-        video.currentTime = t
-        video.onseeked = () => {
-          ctx.drawImage(video, 0, 0, W, H)
-          drawOverlay(ctx, W, H, t, result, matchInfo)
-          res()
-        }
-      })
-
-    while (t <= duration && !cancelRef.current) {
-      await seekAndDraw()
-      setProgress(Math.round((t / duration) * 100))
-      t += frameMs / 1000
-      // Yield to browser
-      await new Promise(r => setTimeout(r, 0))
-    }
+    // Draw final frame
+    ctx.drawImage(video, 0, 0, W, H)
+    drawOverlay(ctx, W, H, duration, result, matchInfo)
 
     recorder.stop()
     await recordingDone
@@ -283,8 +243,7 @@ export function VideoExporter({ videoUrl, result, matchInfo }: VideoExporterProp
     }
 
     const blob = new Blob(chunks, { type: mimeType })
-    const url  = URL.createObjectURL(blob)
-    setDownloadUrl(url)
+    setDownloadUrl(URL.createObjectURL(blob))
     setState('done')
   }
 
