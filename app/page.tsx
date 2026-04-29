@@ -149,25 +149,23 @@ export default function HomePage() {
   const isAnalyzing = status === 'analyzing'
 
   return (
-    <main className="mx-auto min-h-screen max-w-7xl px-4 py-8 md:px-6 xl:px-8">
-      <div className="mb-8 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <div className="text-sm font-semibold uppercase tracking-[0.35em] text-amber-300">Insight Dynamics Shooting — Movie</div>
-          <h1 className="mt-2 text-4xl font-black tracking-tight text-white">Skuddanalyse direkte i nettleseren</h1>
-          <p className="mt-3 max-w-3xl text-slate-300">
-            Last opp en opptak fra iPhone eller kamera. Lyden analyseres lokalt i nettleseren — ingen opplasting til server.
-          </p>
-        </div>
+    <main className="w-full min-h-screen px-3 py-5 md:px-6 xl:px-8 xl:max-w-7xl xl:mx-auto">
+      <div className="mb-6">
+        <div className="text-xs font-semibold uppercase tracking-[0.35em] text-amber-300">Insight Dynamics Shooting — Movie</div>
+        <h1 className="mt-2 text-2xl font-black tracking-tight text-white md:text-4xl">Skuddanalyse direkte i nettleseren</h1>
+        <p className="mt-2 text-sm text-slate-300">
+          Last opp opptak fra iPhone. Lyden analyseres lokalt — ingen opplasting til server.
+        </p>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.45fr_0.95fr]">
-        <div className="space-y-6">
+      <div className="grid gap-4 xl:grid-cols-[1.45fr_0.95fr]">
+        <div className="space-y-4">
           <MatchStageHeader value={matchInfo} onChange={setMatchInfo} />
-          <VideoPlayer videoUrl={videoUrl} videoRef={videoRef} matchInfo={matchInfo} currentTime={currentTime} />
+          <VideoPlayer videoUrl={videoUrl} videoRef={videoRef} matchInfo={matchInfo} currentTime={currentTime} result={result} />
           <Timeline result={result} duration={duration} currentTime={currentTime} onSeek={seekTo} />
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-4">
           <UploadPanel onSelect={setFile} fileName={file?.name} disabled={isAnalyzing} />
           <AnalysisStatus status={status} phase={analysisPhase} error={error} fileName={file?.name ?? null} fileSize={file?.size ?? null} />
           <AnalysisControls
