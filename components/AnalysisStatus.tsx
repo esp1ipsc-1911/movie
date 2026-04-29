@@ -1,42 +1,59 @@
-import { AnalysisJobStatus, UploadState } from '@/lib/types'
+import { AnalysisJobStatus } from '@/lib/types'
 
 const labels: Record<AnalysisJobStatus, string> = {
-  idle: 'Waiting for a file',
-  uploading: 'Uploading video to storage',
-  uploaded: 'Upload finished',
-  queued: 'Analysis job created',
-  analyzing: 'Server is analyzing the video',
-  completed: 'Analysis completed',
-  failed: 'Analysis failed',
+  idle: 'Venter på video',
+  uploading: 'Laster opp…',
+  uploaded: 'Opplasting ferdig',
+  queued: 'Analyse i kø',
+  analyzing: 'Analyserer lyd…',
+  completed: 'Analyse fullført',
+  failed: 'Analyse feilet',
+}
+
+const dotColor: Record<AnalysisJobStatus, string> = {
+  idle: 'bg-slate-600',
+  uploading: 'bg-amber-300 animate-pulse',
+  uploaded: 'bg-amber-300',
+  queued: 'bg-amber-300 animate-pulse',
+  analyzing: 'bg-amber-300 animate-pulse',
+  completed: 'bg-emerald-400',
+  failed: 'bg-red-500',
 }
 
 type AnalysisStatusProps = {
   status: AnalysisJobStatus
-  upload: UploadState
+  phase: string
   error: string | null
-  jobId: string | null
+  fileName: string | null
+  fileSize: number | null
 }
 
-export function AnalysisStatus({ status, upload, error, jobId }: AnalysisStatusProps) {
+function formatSize(bytes: number | null) {
+  if (!bytes) return null
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+export function AnalysisStatus({ status, phase, error, fileName, fileSize }: AnalysisStatusProps) {
   return (
     <div className="rounded-[2rem] border border-white/10 bg-panel2/80 p-5 shadow-soft backdrop-blur">
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-300">Status</div>
           <div className="mt-3 text-2xl font-black text-white">{labels[status]}</div>
-          {jobId ? <div className="mt-2 text-xs text-slate-400">Job ID: {jobId}</div> : null}
+          {phase ? <div className="mt-1 text-sm text-amber-300/80">{phase}</div> : null}
         </div>
-        <span className={`inline-flex h-3 w-3 rounded-full ${status === 'failed' ? 'bg-red-500' : status === 'completed' ? 'bg-emerald-400' : 'bg-amber-300'}`} />
+        <span className={`mt-1 inline-flex h-3 w-3 flex-shrink-0 rounded-full ${dotColor[status]}`} />
       </div>
 
       <div className="mt-5 grid gap-3 rounded-2xl border border-white/10 bg-slate-950/40 p-4 text-sm text-slate-300 md:grid-cols-2">
         <div>
-          <div className="text-[11px] uppercase tracking-[0.24em] text-slate-500">Selected file</div>
-          <div className="mt-2 break-all text-white">{upload.fileName || 'No file selected'}</div>
+          <div className="text-[11px] uppercase tracking-[0.24em] text-slate-500">Valgt fil</div>
+          <div className="mt-2 break-all text-white">{fileName || 'Ingen fil valgt'}</div>
         </div>
         <div>
-          <div className="text-[11px] uppercase tracking-[0.24em] text-slate-500">Storage URL</div>
-          <div className="mt-2 break-all text-white">{upload.url || 'Not uploaded yet'}</div>
+          <div className="text-[11px] uppercase tracking-[0.24em] text-slate-500">Størrelse</div>
+          <div className="mt-2 text-white">{formatSize(fileSize) || '—'}</div>
         </div>
       </div>
 
@@ -46,3 +63,4 @@ export function AnalysisStatus({ status, upload, error, jobId }: AnalysisStatusP
     </div>
   )
 }
+

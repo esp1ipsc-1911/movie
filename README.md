@@ -1,73 +1,43 @@
-# Insight Dynamics Shooting - Movie v2
+# Insight Dynamics Shooting — Movie
 
-This version restructures the app for **iPhone-first uploads**.
+Skuddanalyseverktøy basert på video. Last opp en iPhone-video, og lyden analyseres direkte i nettleseren — ingen server-backend nødvendig.
 
-## What changed
+## Arkitektur (Alternativ A — browser-analyse)
 
-The original MVP tried to analyze video audio in the browser. That is too fragile for iPhone-originated MOV/HEVC uploads. In v2:
+All analyse skjer lokalt i nettleseren via Web Audio API:
 
-- the browser uploads the original video directly to **Vercel Blob**
-- the app creates an **analysis job**
-- a backend analyzer service is expected to download the video and process it server-side
-- the web UI polls for job status and displays the result
+1. **Opplasting** — brukeren velger en MP4 eller MOV-fil lokalt
+2. **Lydekstraksjon** — `extractAudio.ts` bruker `AudioContext.decodeAudioData()` + `OfflineAudioContext` for å normalisere til mono 44100 Hz Float32
+3. **Start-beep** — `detectStartBeep.ts` finner startsignal via energi + zero-crossing rate
+4. **Skudddeteksjon** — `detectShots.ts` scorer hvert frame på peak, energi og transient; `filterEchoes.ts` fjerner ekko
+5. **Statistikk** — `calculateStats.ts` beregner splits, reaksjonstid og beste split
+6. **Resultat** — Timeline og OverlayStats viser resultatet
 
-## Important honesty
+## iPhone-kompatibilitet
 
-This package is a **production-minded scaffold**, not the final analyzer.
+| Modell | Status |
+|---|---|
+| iPhone 5s (iOS 12) | ⚠️ Kantcase – treg på store filer |
+| iPhone 6 / 6 Plus | ⚠️ Kantcase – begrenset RAM |
+| **iPhone 6s og nyere** | **✅ Fungerer** |
 
-What is ready:
-- Vercel-ready Next.js frontend
-- direct Blob client upload route
-- analysis job creation route
-- analysis status polling route
-- updated iPhone-focused UI and status flow
-- analyzer service starter folder
+> **Merk:** HEVC-video fra iPhone er ikke et problem. Lydsporet er alltid AAC, som Safari på iOS støtter fullt ut i Web Audio API.
 
-What is still TODO:
-- real ffmpeg audio extraction
-- real beep detection
-- real shot detection and echo filtering
-- persistent job storage instead of in-memory placeholders
+## Kom i gang
 
-## Vercel setup
+```bash
+npm install
+npm run dev
+```
 
-### 1. Blob storage
-In your Vercel project:
-- open **Storage**
-- create a **Blob** store
-- attach it to this project
+Ingen miljøvariabler trengs for browser-analyse.
 
-Vercel will add:
-- `BLOB_READ_WRITE_TOKEN`
-
-### 2. Environment variables
-Add these in Vercel Project Settings → Environment Variables:
-
-- `BLOB_READ_WRITE_TOKEN` (from Blob setup)
-- `ANALYZER_BASE_URL` (URL of the deployed analyzer service)
-- `ANALYZER_API_KEY` (optional, if you secure the analyzer)
-
-### 3. Deploy frontend
-Push these files to GitHub and let Vercel deploy.
-
-## Analyzer backend
-The `analyzer/` folder is a separate backend service starter.
-
-Deploy it to one of:
-- Railway
-- Render
-- Google Cloud Run
-
-Then set `ANALYZER_BASE_URL` in Vercel to that deployed service URL.
-
-## File map
+## Filstruktur
 
 ```text
 app/
-  api/upload/route.ts
-  api/analysis/create/route.ts
-  api/analysis-status/[jobId]/route.ts
-  page.tsx
+  page.tsx                       ← Hovedside med browser-analyseflyt
+  api/                           ← API-ruter (ikke i bruk for Alternativ A)
 components/
   UploadPanel.tsx
   AnalysisStatus.tsx
@@ -76,11 +46,22 @@ components/
   VideoPlayer.tsx
   Timeline.tsx
   OverlayStats.tsx
-analyzer/
-  main.py
-  requirements.txt
-  README.md
+lib/
+  audio/
+    extractAudio.ts              ← Web Audio API + OfflineAudioContext
+    detectStartBeep.ts           ← Energi + ZCR-basert beep-detektor
+    detectShots.ts               ← Peak/energi/transient scoring
+    filterEchoes.ts              ← Ekkofiltring
+    calculateStats.ts            ← Splits, reaksjonstid, beste split
+  types.ts
+analyzer/                        ← Python/FastAPI backend (ikke i bruk for Alternativ A)
 ```
 
-## Next recommended step
-Implement the real analyzer in `analyzer/main.py` with ffmpeg and audio detection.
+## Justerbare parametere
+
+| Parameter | Standard | Beskrivelse |
+|---|---|---|
+| Sensitivity | 1.0 | Terskel for skudd-score |
+| Echo filter window | 120 ms | Vindu for å filtrere ekko |
+| Min shot gap | 140 ms | Minimumstid mellom skudd |
+| Noise floor | 0.04 | Bakgrunnsstøy-terskel |

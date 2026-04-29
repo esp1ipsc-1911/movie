@@ -38,8 +38,8 @@ export function AnalysisControls({
 }: AnalysisControlsProps) {
   return (
     <div className="rounded-[2rem] border border-white/10 bg-panel2/80 p-5 shadow-soft backdrop-blur">
-      <div className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-300">Controls</div>
-      <p className="mt-2 text-sm text-slate-300">Tune the backend detector settings that will be sent together with the upload job.</p>
+      <div className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-300">Innstillinger</div>
+      <p className="mt-2 text-sm text-slate-300">Juster parameterne for skudddeteksjonen. Analysen kjører lokalt i nettleseren.</p>
 
       <div className="mt-5 space-y-5">
         {sliderFields.map((field) => (
@@ -74,7 +74,7 @@ export function AnalysisControls({
           disabled={disabled || isAnalyzing}
           className="w-full rounded-2xl bg-accent px-4 py-4 text-base font-black text-slate-950 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isAnalyzing ? 'Starting analysis…' : 'Upload + analyze video'}
+          {isAnalyzing ? 'Analyserer…' : 'Analyser video'}
         </button>
         <button
           type="button"
@@ -82,7 +82,7 @@ export function AnalysisControls({
           disabled={disabled}
           className="w-full rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-4 text-base font-bold text-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Add shot at current time
+          Legg til skudd på nåværende tid
         </button>
         <button
           type="button"
@@ -90,7 +90,7 @@ export function AnalysisControls({
           disabled={disabled}
           className="w-full rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-4 text-base font-bold text-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Remove last shot
+          Fjern siste skudd
         </button>
       </div>
     </div>

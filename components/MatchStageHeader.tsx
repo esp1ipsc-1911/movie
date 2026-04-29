@@ -8,9 +8,9 @@ type MatchStageHeaderProps = {
 }
 
 const fields: Array<{ key: keyof MatchInfo; label: string; placeholder: string }> = [
-  { key: 'matchName', label: 'Match', placeholder: 'Example: Nordic Handgun Cup' },
-  { key: 'stageName', label: 'Stage', placeholder: 'Example: Stage 7' },
-  { key: 'shooterName', label: 'Shooter / run', placeholder: 'Optional' },
+  { key: 'matchName', label: 'Match', placeholder: 'Eks: Nordic Handgun Cup' },
+  { key: 'stageName', label: 'Stage', placeholder: 'Eks: Stage 7' },
+  { key: 'shooterName', label: 'Skytte / run', placeholder: 'Valgfritt' },
 ]
 
 export function MatchStageHeader({ value, onChange }: MatchStageHeaderProps) {
