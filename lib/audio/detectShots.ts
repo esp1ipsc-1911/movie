@@ -1,26 +1,24 @@
 import { AnalysisSettings, ShotEvent } from '@/lib/types'
 
 /**
- * Two-stage shot detector optimised for pistol fire in outdoor ranges.
+ * Cluster-peak shot detector, tuned for 9mm pistol fire outdoors on iPhone.
  *
- * Stage 1 – Peak picker
- *   Slide a short window (~5 ms) across the audio and record the peak
- *   amplitude of every window. This gives us a "peak envelope".
+ * Analysis of real recordings shows:
+ * - Genuine shots produce short bursts of high amplitude (peak > 0.45-0.65)
+ * - Echo/reverb decays within ~200ms but stays audible
+ * - Background movement noise stays below ~0.35 peak
+ * - Shots cluster in tight groups of identical-peak frames (~5-15ms wide)
  *
- * Stage 2 – Adaptive threshold + onset gate
- *   A shot must satisfy ALL of:
- *   a) Peak > absolute floor (noiseFloor * 4) – rules out silence/hiss
- *   b) Peak > adaptive_median * onsetMultiplier – must be much louder
- *      than the recent background level
- *   c) Hard cooldown after each accepted shot – kills echo tails
+ * Strategy:
+ * 1. Build a 5ms peak envelope
+ * 2. Apply a hard amplitude threshold (scales with sensitivity setting)
+ * 3. Group consecutive threshold-crossings into clusters
+ * 4. Take the peak frame of each cluster as the shot time
+ * 5. Enforce minimum gap between shots (kills echoes completely)
  *
- * The adaptive median is the median peak of the last ~0.5 s of windows.
- * This automatically adjusts to the recording's overall loudness level,
- * so the same settings work for quiet indoor ranges and loud outdoor ones.
- *
- * sensitivity slider:  1.0 = onsetMultiplier of 6× (default, strict)
- *                      2.0 = onsetMultiplier of 3× (more sensitive)
- *                      0.5 = onsetMultiplier of 12× (very strict)
+ * This is deliberately simple and robust - no spectral analysis,
+ * no adaptive background, just threshold + clustering.
+ * The sensitivity slider moves the threshold between 0.35 (sensitive) and 0.65 (strict).
  */
 export function detectShots(
   samples: Float32Array,
@@ -30,65 +28,87 @@ export function detectShots(
 ): ShotEvent[] {
   if (startTime === null) return []
 
-  // ~5 ms window, 50 % overlap
-  const winSize  = Math.round(sampleRate * 0.005)
-  const hopSize  = Math.round(sampleRate * 0.0025)
-  const startIdx = Math.floor((startTime + 0.08) * sampleRate)
+  // 5ms window, 2.5ms hop - short enough to catch sharp transients
+  const winSize = Math.round(sampleRate * 0.005)
+  const hopSize = Math.round(sampleRate * 0.0025)
+  const startIdx = Math.floor((startTime + 0.05) * sampleRate)
 
-  // --- Stage 1: build peak envelope ----------------------------------------
-  const peaks: number[] = []
+  // Threshold: sensitivity=1.0 → 0.50, sensitivity=2.0 → 0.35, sensitivity=0.5 → 0.65
+  // Clamped to [0.30, 0.75]
+  const threshold = Math.max(0.30, Math.min(0.75, 0.50 / settings.sensitivity))
+
+  // Min gap between shots in frames - based on minShotGapMs setting
+  const minGapFrames = Math.round((settings.minShotGapMs / 1000) / (hopSize / sampleRate))
+
+  // --- Build peak envelope ---
+  const peakEnv: number[] = []
+  const envTimes: number[] = []
   for (let i = startIdx; i + winSize < samples.length; i += hopSize) {
     let peak = 0
     for (let j = 0; j < winSize; j++) {
       const a = Math.abs(samples[i + j])
       if (a > peak) peak = a
     }
-    peaks.push(peak)
+    peakEnv.push(peak)
+    envTimes.push(i / sampleRate)
   }
 
-  // Absolute minimum peak to even consider (3× noiseFloor, min 0.12)
-  const absFloor = Math.max(settings.noiseFloor * 4, 0.12)
-
-  // How many frames to look back for the adaptive background median (~0.5 s)
-  const medianWindow = Math.round(0.5 / (hopSize / sampleRate))
-
-  // onsetMultiplier: how many times louder than background a shot must be
-  const onsetMultiplier = 6.0 / settings.sensitivity
-
-  // Hard cooldown in frames
-  const cooldownFrames = Math.round((settings.minShotGapMs / 1000) / (hopSize / sampleRate))
-
-  // --- Stage 2: pick shots --------------------------------------------------
+  // --- Cluster detection ---
+  // Group consecutive frames above threshold into clusters,
+  // then take the highest-peak frame as the shot.
   const shots: ShotEvent[] = []
-  let cooldown = 0
+  let lastShotFrame = -minGapFrames * 2
+  let inCluster = false
+  let clusterPeak = 0
+  let clusterPeakFrame = 0
 
-  for (let fi = 0; fi < peaks.length; fi++) {
-    if (cooldown > 0) { cooldown--; continue }
+  for (let fi = 0; fi < peakEnv.length; fi++) {
+    const p = peakEnv[fi]
 
-    const peak = peaks[fi]
-    if (peak < absFloor) continue
+    if (p >= threshold) {
+      if (!inCluster) {
+        // Start new cluster - but only if past the minimum gap
+        if (fi - lastShotFrame >= minGapFrames) {
+          inCluster = true
+          clusterPeak = p
+          clusterPeakFrame = fi
+        }
+      } else {
+        // Extend cluster, track peak frame
+        if (p > clusterPeak) {
+          clusterPeak = p
+          clusterPeakFrame = fi
+        }
+      }
+    } else {
+      if (inCluster) {
+        // Cluster ended - emit shot at peak frame
+        const eventTime = envTimes[clusterPeakFrame]
+        shots.push({
+          id: `shot-${shots.length + 1}-${eventTime.toFixed(3)}`,
+          time: Number(eventTime.toFixed(3)),
+          confidence: Number(clusterPeak.toFixed(3)),
+          source: 'auto',
+        })
+        lastShotFrame = clusterPeakFrame
+        inCluster = false
+        clusterPeak = 0
+      }
+    }
+  }
 
-    // Adaptive background: median of previous medianWindow frames
-    const lo  = Math.max(0, fi - medianWindow)
-    const slice = peaks.slice(lo, fi).sort((a, b) => a - b)
-    const background = slice.length > 0 ? slice[Math.floor(slice.length / 2)] : 0
-
-    // Must be significantly louder than background
-    if (peak < background * onsetMultiplier) continue
-
-    const eventTime = startIdx / sampleRate + fi * (hopSize / sampleRate)
-    const confidence = background > 0 ? peak / background : peak * 10
-
+  // Handle cluster that extends to end of audio
+  if (inCluster) {
+    const eventTime = envTimes[clusterPeakFrame]
     shots.push({
       id: `shot-${shots.length + 1}-${eventTime.toFixed(3)}`,
       time: Number(eventTime.toFixed(3)),
-      confidence: Number(Math.min(confidence, 99).toFixed(3)),
+      confidence: Number(clusterPeak.toFixed(3)),
       source: 'auto',
     })
-
-    cooldown = cooldownFrames
   }
 
   return shots
 }
+
 
